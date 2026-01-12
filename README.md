@@ -1,4 +1,4 @@
-# Financeiro Lucky Bot
+# Telegram Bot Financeiro
 
 Bot de Telegram para gestão financeira pessoal.
 
