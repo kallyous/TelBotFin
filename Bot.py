@@ -11,7 +11,7 @@ from Report import Report
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-    level=logging.INFO
+    level=logging.ERROR
 )
 
 
@@ -98,7 +98,7 @@ def get_active_transaction(chat_id):
         with open(at_path, "r") as f:
             year, month, day, stamp = f.readline().split()
     except Exception as e:
-        logging.error(e)
+        logging.info(e)
         return "", "", "", ""
     return year, month, day, stamp
 
