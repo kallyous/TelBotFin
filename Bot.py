@@ -9,13 +9,6 @@ from Report import Report
 
 
 
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-    level=logging.ERROR
-)
-
-
-
 def validate_transaction(args, types, tags):
 
     if len(args) < 1:
@@ -319,6 +312,29 @@ async def tags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == "__main__":
 
     load_dotenv()
+
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+
+    if log_level == "ERROR":
+        logging.basicConfig(
+            format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+            level=logging.ERROR
+        )
+    elif log_level == "WARNING":
+        logging.basicConfig(
+            format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+            level=logging.WARNING
+        )
+    elif log_level == "DEBUG":
+        logging.basicConfig(
+            format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+            level=logging.DEBUG
+        )
+    else:
+        logging.basicConfig(
+            format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+            level=logging.INFO
+        )
 
     application = ApplicationBuilder().token(os.getenv("TOKEN")).build()
 
