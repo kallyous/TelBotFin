@@ -314,6 +314,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     log_level = os.getenv("LOG_LEVEL", "INFO")
+    print(f"Log level: {log_level}")
 
     if log_level == "ERROR":
         logging.basicConfig(
@@ -368,4 +369,8 @@ if __name__ == "__main__":
     see_tags_handler = CommandHandler("tags", tags)
     application.add_handler(see_tags_handler)
 
+    print("Bot starting...")
+
     application.run_polling()
+
+    print("Bot stopped")
