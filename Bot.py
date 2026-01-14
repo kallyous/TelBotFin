@@ -204,6 +204,20 @@ async def get_transaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+async def update_transaction_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if len(context.args) < 1:
+        reply = "Forneça o novo valor da transação."
+
+    else:
+        year, month, day, stamp = get_active_transaction(update.effective_chat.id)
+        db = Database(update.effective_chat.id)
+        result, reply = db.update_transaction_value(year, month, day, stamp, context.args[0])
+
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=reply)
+
+
+
 async def update_transaction_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(context.args) < 1:
@@ -353,6 +367,9 @@ if __name__ == "__main__":
 
     get_transaction_handler = CommandHandler("ver", get_transaction)
     application.add_handler(get_transaction_handler)
+
+    update_trans_value_handler = CommandHandler("valor", update_transaction_value)
+    application.add_handler(update_trans_value_handler)
 
     update_trans_type_handler = CommandHandler("tipo", update_transaction_type)
     application.add_handler(update_trans_type_handler)

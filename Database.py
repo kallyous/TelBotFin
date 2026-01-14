@@ -152,6 +152,24 @@ class Database:
         return results
 
 
+    def update_transaction_value(self, year, month, day, stamp, new_value):
+
+        try:
+            value = float(new_value)
+        except ValueError:
+            return False, "Forneça um valor númerico."
+
+        try:
+            self.data[year][month][day][stamp]["amount"] = value
+        except KeyError:
+            return False, "Transação não encontrada."
+
+        with open(self.data_path, 'w') as f:
+            f.write(json.dumps(self.data))
+
+        return True, "Transação atualizada."
+
+
     def update_transaction_type(self, year, month, day, stamp, new_type):
 
         if new_type not in self.types:
