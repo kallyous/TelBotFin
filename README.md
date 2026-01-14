@@ -63,6 +63,14 @@ Exibe e seleciona uma transação, caso ela exista.
 Quando invocada sem argumentos, exibe a transação selecionada.
 
 
+### Alterar valor da transação
+```
+/valor <novo_valor>
+```
+Atualiza o valor da transação selecionada.
+Aceita valores negativos (para saída) e positivos (para entrada).
+
+
 ### Alterar tipo da transação
 ```
 /tipo <tipo_da_transação>
