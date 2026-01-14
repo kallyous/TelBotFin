@@ -97,6 +97,15 @@ def get_active_transaction(chat_id):
 
 
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    with open("README.md", "r") as f:
+        reply = f.read()
+
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=reply)
+
+
+
 async def cash_in(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = Database(update.effective_chat.id)
 
@@ -352,6 +361,9 @@ if __name__ == "__main__":
         )
 
     application = ApplicationBuilder().token(os.getenv("TOKEN")).build()
+
+    start_handler = CommandHandler("start", start)
+    application.add_handler(start_handler)
 
     cash_in_handler = CommandHandler("entra", cash_in)
     application.add_handler(cash_in_handler)
