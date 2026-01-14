@@ -1,9 +1,16 @@
-# Telegram Bot Financeiro
+# Assistente Financeiro
 
 Bot de Telegram para gestão financeira pessoal.
 
 
 ## Comandos
+
+
+### Início
+```
+/start
+```
+Exibe lista de comandos e suas explicações.
 
 
 ### Entrada
