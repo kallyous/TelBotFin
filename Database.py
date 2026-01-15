@@ -1,234 +1,380 @@
-import json
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 
 
 class Database:
 
-    def __init__(self, chat_id):
-        
+    def __init__(self, datapath: Path, chat_id):
+
         self.chat_id = chat_id
-        
-        self.data_path = Path(f"{chat_id}.json")
-        if not self.data_path.exists():
-            data = {}
-            with open(self.data_path, 'w') as f:
-                f.write(json.dumps(data))
-        with open(self.data_path, 'r') as f:
-            self.data = json.load(f)
+        self.data_path = datapath / f"{chat_id}.db"
 
-        self.types_path = Path(f"{self.chat_id}_types.txt")
-        if not self.types_path.exists():
-            self.types = ["variável", "fixa"]
-            with open(self.types_path, 'w') as f:
-                f.write(" ".join(self.types))
+        if not Path.exists(self.data_path):
+            with sqlite3.connect(self.data_path) as conn:
+
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    value REAL NOT NULL,
+                    time TEXT NOT NULL,
+                    type TEXT,
+                    tags TEXT,
+                    info TEXT
+                )
+                """)
+
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS types (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL
+                )
+                """)
+                types = [("variável",), ("fixa",)]
+                cursor.executemany("INSERT INTO types (name) VALUES (?)", types)
+
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL
+                )
+                """)
+                tags = [("outros",), ("alimentação",), ("transporte",), ("energia",), ("água",), ("telefone",),
+                        ("saúde",), ("lazer",), ("educação",), ("internet",), ("aluguel",)]
+                cursor.executemany("INSERT INTO tags (name) VALUES (?)", tags)
+
+
+    def push_transaction(self, amount, transaction_type, transaction_tags=()):
+        """Cria nova transação.
+
+        Args:
+            amount : valor da transação
+            transaction_type : tipo da transação
+            transaction_tags : tupla com as tags da transação
+
+        Returns:
+            (message, transaction_id)
+        """
+
+        comments = ""
+
+        # Valida valor fornecido.
+        try:
+            value = float(amount)
+        except ValueError:
+            return "Valor deve ser numérico.", None
+
+        # Começa operações com BD pois próximas validações dependem dos tipos e tags registrados.
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+
+            # Validação de tipo
+            cursor.execute("SELECT name FROM types")
+            rows = cursor.fetchall()  # Lista de tuplas. Cada tupla é uma linha dos resultados.
+
+            # Se não foi fornecido um tipo, pegue o tipo de transação default.
+            if not transaction_type:
+                trans_type = rows[0][0]
+                comments += f"Tipo não fornecido, usando '{trans_type}'.\n"
+
+            # Se foi fornecido, vamos verificar se é um tipo válido.
+            else:
+                trans_type = None
+                for row in rows:
+                    if row[0] == transaction_type:
+                        trans_type = transaction_type
+
+                # Se tipo fornecido não coincidiu com nenhum tipo registrado, reporte erro.
+                if not trans_type:
+                    return "Tipo de transação não registrado.", None
+
+            # Validação de tags. Apenas ignora tags não registradas.
+            cursor.execute("SELECT name FROM tags")
+            rows = cursor.fetchall()
+            registered_tags = [row[0] for row in rows]
+            effective_tags = []
+            for tag in transaction_tags:
+                if tag in registered_tags:
+                    effective_tags.append(tag)
+                else:
+                    comments += f"Ignorando '{tag}' pois não está registrada como tag.\n"
+            effective_tags = " ".join(effective_tags)
+            if effective_tags == "":
+                effective_tags = None
+
+            # Horário da Transação
+            now = datetime.now()
+            timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+
+            cursor.execute("INSERT INTO transactions (value, time, type, tags) VALUES (?, ?, ?, ?)",
+                           (value, timestamp, trans_type, effective_tags))
+
+            transaction_id = cursor.lastrowid
+
+        main_msg = timestamp + "\n\n"
+        main_msg += f"ID: {transaction_id}\n"
+        main_msg += f"Valor: R$ {value}\n"
+        main_msg += f"Tipo: {trans_type}\n"
+        if effective_tags:
+            main_msg += f"Tags: {effective_tags}\n"
         else:
-            with open(self.types_path, 'r') as f:
-                self.types = f.read().split()
+            main_msg += "Sem tags\n"
+        if comments:
+            main_msg += f"\n{comments}"
+        main_msg = main_msg.strip()
 
-        self.tags_path = Path(f"{self.chat_id}_tags.txt")
-        if not self.tags_path.exists():
-            self.tags = ["outros", "alimentação", "transporte", "energia", "água", "telefone", "saúde", "lazer"
-                         "educação", "internet", "aluguel"]
-            with open(self.tags_path, 'w') as f:
-                f.write(" ".join(self.tags))
-        else:
-            with open(self.tags_path, 'r') as f:
-                self.tags = f.read().split()
+        return main_msg, transaction_id
 
 
-    def details(self):
-        print("\nData path:", self.data_path)
-        print("Data:\n", self.data)
-        print("\nTags path:", self.tags_path)
-        print("Tags:\n", self.tags)
-        print("\nTypes path:", self.types_path)
-        print("Types:\n", self.types)
-        print()
-
-
-    def register_tags(self, new_tags):
-        for tag in new_tags:
-            if tag not in self.tags:
-                self.tags.append(tag)
-        with open(self.tags_path, "w") as f:
-            f.write(" ".join(self.tags))
-
-
-    def unregister_tags(self, remove_tags):
-        tags = set(self.tags) - set(remove_tags)
-        self.tags = list(tags)
-        with open(self.tags_path, "w") as f:
-            f.write(" ".join(self.tags))
+    def get_types(self):
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            rows = cursor.execute("SELECT name FROM types")
+            types = [t[0] for t in rows]
+        return types
 
 
     def register_types(self, new_types):
-        for new_type in new_types:
-            if new_type not in self.types:
-                self.types.append(new_type)
-        with open(self.types_path, "w") as f:
-            f.write(" ".join(self.types))
+
+        msg = ""
+
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM types")
+            rows = cursor.fetchall()
+            current_types = [t[0] for t in rows]
+
+            next_types = []
+            for t in new_types:
+                if t not in current_types:
+                    msg += f"Tipo novo: {t}\n"
+                    next_types.append((t,))
+                else:
+                    msg += f"Tipo repetido: {t}\n"
+
+            if len(next_types) > 0:
+                cursor.executemany("INSERT INTO types (name) VALUES (?)", next_types)
+            else:
+                msg += "Nenhum tipo nova a adicionar."
+
+        return msg
 
 
     def unregister_types(self, remove_types):
-        types = set(self.types) - set(remove_types)
-        self.types = list(types)
-        with open(self.types_path, "w") as f:
-            f.write(" ".join(self.types))
+
+        # Transforma a lista de tipos em uma lista de tuplas com os tipos, para uso com cursor.executemany() .
+        remove_types = [(t, ) for t in remove_types]
+
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            cursor.executemany("DELETE FROM types WHERE name = ?", remove_types)
+
+        return "Tipos removidos."
 
 
-    def get_transaction(self, year, month, day, stamp):
-        try:
-            trans = self.data[year][month][day][stamp]
-        except KeyError:
-            trans = None
-        return trans
+    def get_tags(self):
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            rows = cursor.execute("SELECT name FROM tags")
+            tags = [t[0] for t in rows]
+        return tags
 
 
-    def push_transaction(self, amount, transaction_type, tags=()):
+    def register_tags(self, new_tags):
 
-        with open(self.data_path, 'r') as f:
-            data = json.load(f)
+        msg = ""
 
-        now = datetime.now()
-        stamp = now.strftime('%H%M%S')
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
 
-        year = f"{now.year}"
-        month = f"{now.month}"
-        day = f"{now.day}"
+            cursor.execute("SELECT name FROM tags")
+            rows = cursor.fetchall()
+            current_tags = [row[0] for row in rows]
+            next_tags = []
+            for tag in new_tags:
+                if tag not in current_tags:
+                    msg += f"Tag Nova: {tag}\n"
+                    next_tags.append((tag,))
+                else:
+                    msg += f"Tag repetida: {tag}\n"
 
-        if not year in data:
-            data[year] = {}
+            if len(next_tags) > 0:
+                cursor.executemany("INSERT INTO tags (name) VALUES (?)", next_tags)
+            else:
+                msg += "Nenhuma tag nova a adicionar."
 
-        if not month in data[year]:
-            data[year][month] = {}
+        return msg
 
-        if not day in data[year][month]:
-            data[year][month][day] = {}
 
-        data[year][month][day][stamp] = {
-            "amount": amount,
-            "type": transaction_type,
-            "tags": tags,
-            "info": ""
-        }
+    def unregister_tags(self, remove_tags):
 
-        with open(self.data_path, 'w') as f:
-            f.write(json.dumps(data))
+        ### NOVO ###
 
-        return year, month, day, stamp
+        # Transforma a lista de tags em uma lista de tuplas com as tags, para uso com cursor.executemany() .
+        remove_tags = [(tag,) for tag in remove_tags]
+
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            cursor.executemany("DELETE FROM tags WHERE name = ?", remove_tags)
+
+        return "Tags removidas."
+
+
+    def get_transaction(self, transaction_id):
+        """Retorna tupla contendo os dados de uma transação.
+
+        Args:
+            transaction_id : ID da transação desejada.
+
+        Returns:
+             (id, value, time, type, tags, info)
+        """
+
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,))
+            row = cursor.fetchone()
+            if row:
+                return row
+            else:
+                return None
 
 
     def fetch_transactions_by_range(self, start_year, start_month, end_year, end_month):
 
-        results = {}
+        start = f"{start_year}-{start_month}-01 00:00:00"
+        end = f"{end_year}-{end_month}-32 23:59:59"
 
-        for year in range(int(start_year), int(end_year) + 1):
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM transactions WHERE time >= ? AND time <= ?", (start, end))
+            rows = cursor.fetchall()
 
-            y = f"{year}"
-            if y in self.data:
-
-                results[y] = {}
-
-                for month in range(1, 13):
-                    if y == start_year and month < int(start_month): continue
-                    if y == end_year and month > int(end_month): continue
-
-                    m = f"{month}"
-                    if m in self.data[y]:
-
-                        results[y][m] = {}
-
-                        for day in range(1, 31):
-
-                            d = f"{day}"
-                            if d in self.data[y][m]:
-
-                                results[y][m][d] = {}
-
-                                for stamp in self.data[y][m][d]:
-                                    results[y][m][d][stamp] = self.data[y][m][d][stamp]
-
-        return results
+        return rows
 
 
-    def update_transaction_value(self, year, month, day, stamp, new_value):
+    def update_transaction_value(self, transaction_id, new_value):
 
         try:
             value = float(new_value)
         except ValueError:
-            return False, "Forneça um valor númerico."
+            return False, "Forneça um valor numérico."
 
         try:
-            self.data[year][month][day][stamp]["amount"] = value
+            trans_id = int(transaction_id)
         except KeyError:
-            return False, "Transação não encontrada."
+            return False, "ID da transação deve ser um número inteiro."
 
-        with open(self.data_path, 'w') as f:
-            f.write(json.dumps(self.data))
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE transactions SET value = ? WHERE id = ?", (value, trans_id))
+            row_count = cursor.rowcount
+
+        if row_count > 0:
+            return True, "Transação atualizada."
+        else:
+            return False, "Nenhuma transação atualizada."
+
+
+    def update_transaction_type(self, transaction_id, new_type):
+
+        try:
+            trans_id = int(transaction_id)
+        except KeyError:
+            return False, "ID da transação deve ser um número inteiro."
+
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+
+            # Obtém tipos registrados.
+            cursor.execute("SELECT name FROM types")
+            rows = cursor.fetchall()
+            types = [t[0] for t in rows]
+
+            if new_type not in types:
+                return False, f"Tipo '{new_type}' não registrado."
+
+            cursor.execute("UPDATE transactions SET type = ? WHERE id = ?", (new_type, trans_id))
+            row_count = cursor.rowcount
+
+            if row_count > 0:
+                return True, "Transação atualizada."
+            else:
+                return False, "Nenhuma transação atualizada."
 
         return True, "Transação atualizada."
 
 
-    def update_transaction_type(self, year, month, day, stamp, new_type):
+    def update_transaction_tags(self, transaction_id, add_tags, remove_tags):
 
-        if new_type not in self.types:
-            return False, "Tipo inválido."
+        main_msg = ""
+        comments = ""
 
-        try:
-            self.data[year][month][day][stamp]["type"] = new_type
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
 
-        except KeyError:
-            return False, "Transação não encontrada."
+            # Resgada tags da transação pertinente.
+            cursor.execute("SELECT tags FROM transactions WHERE id = ?", (transaction_id,))
+            row = cursor.fetchone()
 
-        # Salva alterações.
-        with open(self.data_path, 'w') as f:
-            f.write(json.dumps(self.data))
+            if len(row) < 1:
+                return False, "Transação não encontrada."
 
-        return True, "Transação atualizada."
+            # Lista de tags atuais da transação.
+            if row[0] is not None:
+                current_tags = row[0].split()
+            else:
+                current_tags = []
 
+            # Obtém tags registradas.
+            cursor.execute("SELECT name FROM tags")
+            rows = cursor.fetchall()
+            available_tags = [row[0] for row in rows]
 
-    def update_transaction_tags(self, year, month, day, stamp, add_tags, remove_tags):
-
-        msg = ""
-
-        try:
-            # Lista atual de tags.
-            curr_tags = self.data[year][month][day][stamp]["tags"]
-
-            # Remove tags com aritmética de conjuntos. O teste de pertencimento é O(1), contra O(n) para o mesmo teste
-            new_tags = set(curr_tags) - set(remove_tags)  # em lista, o que é importante para subtração.
-
-            # Para as adições, temos que checar se a tag é válida antes de adicionar.
-            for tag in add_tags:
-                if tag in self.tags:
-                    new_tags.add(tag)
+            # Tags a adicionar devem estar registradas.
+            effective_add_tags = []
+            for t in add_tags:
+                if t in available_tags:
+                    effective_add_tags.append(t)
                 else:
-                    msg += f"Atenção: '{tag}' não adicionada pois não existe na lista de tags.\n"
+                    comments += f"Ignorando '{t}' pois não está registrada."
 
-            # Substitui lista de tags
-            new_tags = list(new_tags)
-            self.data[year][month][day][stamp]["tags"] = new_tags
+            # Inclui novas tags.
+            for tag in effective_add_tags:
+                if tag not in current_tags:
+                    current_tags.append(tag)
 
-            # Salva alterações.
-            with open(self.data_path, 'w') as f:
-                f.write(json.dumps(self.data))
+            # Exclui tags.
+            current_tags = set(current_tags) - set(remove_tags)
+            current_tags = list(current_tags)
+            current_tags = " ".join(current_tags)
 
-        except KeyError:
-            return False, "Transação não encontrada."
+            if not current_tags:
+                current_tags = None
 
-        msg += "Transação atualizada."
-        return True, msg
+            # Escreve novo conjunto de tags no banco.
+            cursor.execute("UPDATE transactions SET tags = ? WHERE id = ?", (current_tags, transaction_id))
+
+            # Monta mensagem de resposta.
+            main_msg = "Transação atualizada."
+            if comments:
+                main_msg += f"\n{comments}"
+
+        return True, main_msg
 
 
-    def update_transaction_info(self, year, month, day, stamp, info):
+    def update_transaction_info(self, transaction_id, info):
 
-        try:
-            self.data[year][month][day][stamp]["info"] = info
-        except KeyError:
-            return False, "Transação não encontrada."
+        with sqlite3.connect(self.data_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE transactions SET info = ? WHERE id = ?", (info, transaction_id))
+            row_count = cursor.rowcount
 
-        with open(self.data_path, 'w') as f:
-            f.write(json.dumps(self.data))
+            if row_count > 0:
+                return True, "Transação atualizada."
+            else:
+                return False, "Nenhuma transação atualizada."
 
-        return True, "Transação atualizada."
