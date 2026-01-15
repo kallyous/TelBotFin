@@ -62,9 +62,9 @@ Retorna o extrato ou histórico de transações do intervalo de mesês especific
 ### Ver e selecionar transação
 ```
 /ver
-/ver <ano> <mês> <dia> <hora-min-sec>
+/ver <id>
 
-/ver 2026 1 10 143753
+/ver 13
 ```
 Exibe e seleciona uma transação, caso ela exista.  
 Quando invocada sem argumentos, exibe a transação selecionada.
