@@ -11,11 +11,8 @@ class Report:
 
         balance = 0
 
-        for y in self.data:
-            for m in self.data[y]:
-                for d in self.data[y][m]:
-                    for stamp in self.data[y][m][d]:
-                        balance += self.data[y][m][d][stamp]["amount"]
+        for row in self.data:
+            balance += row[1]
 
         return balance
 
@@ -23,21 +20,15 @@ class Report:
 
         history = ""
 
-        for y in self.data:
-            for m in self.data[y]:
-                for d in self.data[y][m]:
-                    history += "----------------------------------------"
-                    history += f"\n{y}-{m}-{d}\n\n"
-
-                    for stamp in self.data[y][m][d]:
-                        history += f"{stamp}\n"
-                        history += f"R$ {self.data[y][m][d][stamp]['amount']}"
-                        if len(self.data[y][m][d][stamp]["tags"]) > 0:
-                            history += "\n"
-                            for tag in self.data[y][m][d][stamp]["tags"]:
-                                history += f"{tag} "
-                        if self.data[y][m][d][stamp]["info"] != "":
-                            history += f"\n{self.data[y][m][d][stamp]['info']}"
-                        history += "\n\n"
+        for row in self.data:
+            history += f"{row[2]}\n"
+            history += f"ID: {row[0]}\n"
+            history += f"R$: {row[1]}\n"
+            history += f"Tipo: {row[3]}\n"
+            if row[4]:
+                history += f"Tags: {row[4]}\n"
+            if row[5]:
+                history += f"{row[5]}\n"
+            history += "\n"
 
         return history
